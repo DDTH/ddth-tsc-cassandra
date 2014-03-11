@@ -3,7 +3,7 @@ ddth-tsc-cassandra Table Schema
 
 ## History ##
 
-#### 2014-03-07 ####
+#### 2014-03-12 ####
 First release
 
 ## Keyspace Schema ##
@@ -18,7 +18,7 @@ WITH replication={'class':'SimpleStrategy','replication_factor':'1'}
 ## Counter Table Schema ##
 
 ```sql
-CREATE TABLE "keyspace_name"."table_name" (
+CREATE TABLE "keyspace_name"."tsc_counters" (
     c        varchar,
     ym       int,
     d        int,
@@ -27,3 +27,10 @@ CREATE TABLE "keyspace_name"."table_name" (
     PRIMARY KEY ((c, ym, d), t)
 ) WITH COMPACT STORAGE;
 ```
+
+CREATE TABLE table_name (
+    rrow_key        varchar,
+    col_key       varchar,
+    col_val        varchar
+    PRIMARY KEY (rrow_key, col_key)
+) WITH COMPACT STORAGE;
