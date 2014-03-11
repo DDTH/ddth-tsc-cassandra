@@ -40,6 +40,8 @@ Maven dependency:
 
 ## Usage ##
 
+[Cassandra table schema](SCHEMA.md).
+
 Sample code:
 
 ```java

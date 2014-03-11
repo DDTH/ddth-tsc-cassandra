@@ -27,10 +27,3 @@ CREATE TABLE "keyspace_name"."tsc_counters" (
     PRIMARY KEY ((c, ym, d), t)
 ) WITH COMPACT STORAGE;
 ```
-
-CREATE TABLE table_name (
-    rrow_key        varchar,
-    col_key       varchar,
-    col_val        varchar
-    PRIMARY KEY (rrow_key, col_key)
-) WITH COMPACT STORAGE;
