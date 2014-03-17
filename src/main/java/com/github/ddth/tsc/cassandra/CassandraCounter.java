@@ -3,33 +3,33 @@ package com.github.ddth.tsc.cassandra;
 import java.text.MessageFormat;
 import java.util.Calendar;
 
-import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.PreparedStatement;
-import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import com.github.ddth.tsc.AbstractCounter;
 import com.github.ddth.tsc.DataPoint;
+import com.github.ddth.tsc.DataPoint.Type;
+import com.github.ddth.tsc.cassandra.internal.CassandraUtils;
+import com.github.ddth.tsc.cassandra.internal.CounterMetadata;
 
+/**
+ * Cassandra-backed counter.
+ * 
+ * @author Thanh Nguyen <btnguyen2k@gmail.com>
+ * @since 0.2.0
+ */
 public class CassandraCounter extends AbstractCounter {
 
-    private final static String CQL_TEMPLATE_ADD = "UPDATE {0} SET v=v+? WHERE c=? AND ym=? AND d=? AND t=?";
-    private final static String CQL_TEMPLATE_GET = "SELECT c,ym,d,t,v FROM {0} WHERE c=? AND ym=? AND d=? AND t=?";
-    private final static String CQL_TEMPLATE_GET_ROW = "SELECT c,ym,d,t,v FROM {0} WHERE c=? AND ym=? AND d=?";
-
     private Session session;
-    private PreparedStatement pStmAdd, pStmGet, pStmGetRow;
-
-    private String tableName;
-    private String cqlAdd, cqlGet, cqlGetRow;
+    private PreparedStatement pStmAdd, pStmSet, pStmGet, pStmGetRow;
+    private CounterMetadata metadata;
 
     public CassandraCounter() {
     }
 
-    public CassandraCounter(String name, Session session, String tableName) {
+    public CassandraCounter(String name, Session session, CounterMetadata metadata) {
         super(name);
-        this.session = session;
-        this.tableName = tableName;
+        setSession(session).setMetadata(metadata);
     }
 
     public CassandraCounter setSession(Session session) {
@@ -37,8 +37,8 @@ public class CassandraCounter extends AbstractCounter {
         return this;
     }
 
-    public CassandraCounter setTableName(String tableName) {
-        this.tableName = tableName;
+    public CassandraCounter setMetadata(CounterMetadata metadata) {
+        this.metadata = metadata;
         return this;
     }
 
@@ -48,21 +48,27 @@ public class CassandraCounter extends AbstractCounter {
     @Override
     public void init() {
         super.init();
-        cqlAdd = MessageFormat.format(CQL_TEMPLATE_ADD, tableName);
-        pStmAdd = session.prepare(cqlAdd);
+        String tableName = metadata.table;
 
-        cqlGet = MessageFormat.format(CQL_TEMPLATE_GET, tableName);
+        if (metadata.isCounterColumn) {
+            String cqlAdd = MessageFormat.format(CqlTemplate.CQL_TEMPLATE_ADD_COUNTER, tableName);
+            pStmAdd = session.prepare(cqlAdd);
+        } else {
+            String cqlSet = MessageFormat.format(CqlTemplate.CQL_TEMPLATE_SET_COUNTER, tableName);
+            pStmSet = session.prepare(cqlSet);
+        }
+
+        String cqlGet = MessageFormat.format(CqlTemplate.CQL_TEMPLATE_GET_COUNTER, tableName);
         pStmGet = session.prepare(cqlGet);
 
-        cqlGetRow = MessageFormat.format(CQL_TEMPLATE_GET_ROW, tableName);
+        String cqlGetRow = MessageFormat
+                .format(CqlTemplate.CQL_TEMPLATE_GET_COUNTER_ROW, tableName);
         pStmGetRow = session.prepare(cqlGetRow);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public DataPoint get(long timestampMs) {
+    /*----------------------------------------------------------------------*/
+
+    private static int[] toYYYYMM_DD(long timestampMs) {
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(timestampMs);
 
@@ -70,16 +76,7 @@ public class CassandraCounter extends AbstractCounter {
         int mm = cal.get(Calendar.MONTH) + 1;
         int dd = cal.get(Calendar.DAY_OF_MONTH);
 
-        Long key = toTimeSeriesPoint(timestampMs);
-
-        BoundStatement stm = pStmGet.bind(getName(), yyyy * 100 + mm, dd, key.longValue());
-        ResultSet rs = session.execute(stm);
-        Row row = rs.one();
-        if (row == null) {
-            return new DataPoint(key.longValue(), 0, RESOLUTION_MS);
-        }
-        DataPoint result = new DataPoint(key.longValue(), row.getLong("v"), RESOLUTION_MS);
-        return result;
+        return new int[] { yyyy * 100 + mm, dd };
     }
 
     /**
@@ -87,16 +84,64 @@ public class CassandraCounter extends AbstractCounter {
      */
     @Override
     public void add(long timestampMs, long value) {
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(timestampMs);
-
+        if (!metadata.isCounterColumn) {
+            throw new IllegalStateException("Counter [" + getName()
+                    + "] does not support ADD operator!");
+        }
         Long key = toTimeSeriesPoint(timestampMs);
-        int yyyy = cal.get(Calendar.YEAR);
-        int mm = cal.get(Calendar.MONTH) + 1;
-        int dd = cal.get(Calendar.DAY_OF_MONTH);
-
-        BoundStatement stm = pStmAdd.bind(value, getName(), yyyy * 100 + mm, dd, key.longValue());
-        session.execute(stm);
+        int[] yyyymm_dd = toYYYYMM_DD(timestampMs);
+        CassandraUtils.executeNonSelect(session, pStmAdd, value, getName(), yyyymm_dd[0],
+                yyyymm_dd[1], key.longValue());
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void set(long timestampMs, long value) {
+        if (metadata.isCounterColumn) {
+            throw new IllegalStateException("Counter [" + getName()
+                    + "] does not support SET operator!");
+        }
+        Long key = toTimeSeriesPoint(timestampMs);
+        int[] yyyymm_dd = toYYYYMM_DD(timestampMs);
+        CassandraUtils.executeNonSelect(session, pStmSet, value, getName(), yyyymm_dd[0],
+                yyyymm_dd[1], key.longValue());
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public DataPoint get(long timestampMs) {
+        Long key = toTimeSeriesPoint(timestampMs);
+        int[] yyyymm_dd = toYYYYMM_DD(timestampMs);
+
+        Row row = CassandraUtils.executeOne(session, pStmGet, getName(), yyyymm_dd[0],
+                yyyymm_dd[1], key.longValue());
+        if (row == null) {
+            return new DataPoint(Type.NONE, key.longValue(), 0, RESOLUTION_MS);
+        } else {
+            return new DataPoint(Type.SUM, key.longValue(), row.getLong("v"), RESOLUTION_MS);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public DataPoint get(long timestampMs, DataPoint.Type type, int steps) {
+        int blockSize = steps * RESOLUTION_MS;
+        Long key = toTimeSeriesPoint(timestampMs, steps);
+        DataPoint result = new DataPoint().type(type).blockSize(blockSize)
+                .timestamp(key.longValue());
+
+        long _key = key.longValue();
+        for (int i = 0; i < steps; i++) {
+            DataPoint _temp = get(_key);
+            result.add(_temp);
+            _key += RESOLUTION_MS;
+        }
+        return result;
+    }
 }

@@ -11,16 +11,16 @@ import com.github.ddth.tsc.mem.InmemCounter;
  * Test cases for {@link InmemCounter}.
  * 
  * @author Thanh Nguyen <btnguyen2k@gmail.com>
- * @since 0.1.0
+ * @since 0.3.0
  */
-public class SingleDataPointTest1 extends BaseCounterTest {
+public class SingleDataPointSet2Test extends BaseCounterTest {
     /**
      * Create the test case
      * 
      * @param testName
      *            name of the test case
      */
-    public SingleDataPointTest1(String testName) {
+    public SingleDataPointSet2Test(String testName) {
         super(testName);
     }
 
@@ -28,19 +28,22 @@ public class SingleDataPointTest1 extends BaseCounterTest {
      * @return the suite of tests being tested
      */
     public static Test suite() {
-        return new TestSuite(SingleDataPointTest1.class);
+        return new TestSuite(SingleDataPointSet2Test.class);
     }
 
     @org.junit.Test
-    public void testSingleDataPoint1() {
-        final long VALUE = 2;
+    public void testSingleDataPoint2() {
+        final long VALUE = 3;
+        final int NUM_LOOP = 1000;
 
         long timestamp = System.currentTimeMillis();
         long delta = timestamp % AbstractCounter.RESOLUTION_MS;
         long key = timestamp - delta;
-        counter.add(timestamp, VALUE);
-        DataPoint dataPoint = counter.get(timestamp);
-        assertEquals(VALUE, dataPoint.value());
+        for (int i = 0; i < NUM_LOOP; i++) {
+            counter2.set(timestamp, VALUE + i);
+        }
+        DataPoint dataPoint = counter2.get(timestamp);
+        assertEquals(VALUE + NUM_LOOP - 1, dataPoint.value());
         assertEquals(key, dataPoint.timestamp());
     }
 }

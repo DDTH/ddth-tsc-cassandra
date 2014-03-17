@@ -12,14 +12,14 @@ import com.github.ddth.tsc.mem.InmemCounter;
  * @author Thanh Nguyen <btnguyen2k@gmail.com>
  * @since 0.1.0
  */
-public class SeriesDataPointTest3 extends BaseCounterTest {
+public class LastNAdd1Test extends BaseCounterTest {
     /**
      * Create the test case
      * 
      * @param testName
      *            name of the test case
      */
-    public SeriesDataPointTest3(String testName) {
+    public LastNAdd1Test(String testName) {
         super(testName);
     }
 
@@ -27,13 +27,13 @@ public class SeriesDataPointTest3 extends BaseCounterTest {
      * @return the suite of tests being tested
      */
     public static Test suite() {
-        return new TestSuite(SeriesDataPointTest3.class);
+        return new TestSuite(LastNAdd1Test.class);
     }
 
     @org.junit.Test
-    public void testSeriesDataPoints3() throws InterruptedException {
-        final long VALUE = 13;
-        final int NUM_LOOP = 5000;
+    public void testLastN1() throws InterruptedException {
+        final long VALUE = 7;
+        final int NUM_LOOP = 1000;
         final int NUM_THREAD = 4;
 
         Thread[] threads = new Thread[NUM_THREAD];
@@ -41,9 +41,9 @@ public class SeriesDataPointTest3 extends BaseCounterTest {
             threads[i] = new Thread() {
                 public void run() {
                     for (int i = 0; i < NUM_LOOP; i++) {
-                        counter.add(VALUE);
+                        counter1.add(VALUE);
                         try {
-                            Thread.sleep(1);
+                            Thread.sleep(0);
                         } catch (InterruptedException e) {
                         }
                     }
@@ -51,16 +51,14 @@ public class SeriesDataPointTest3 extends BaseCounterTest {
             };
         }
 
-        long timestampStart = System.currentTimeMillis();
         for (Thread t : threads) {
             t.start();
         }
         for (Thread t : threads) {
             t.join();
         }
-        long timestampEnd = System.currentTimeMillis() + 1;
-        DataPoint[] dataPoints = counter.getSeries(timestampStart, timestampEnd, 7);
-        assertTrue(dataPoints.length >= 1);
+        DataPoint[] dataPoints = counter1.getLastN(10);
+        assertEquals(10, dataPoints.length);
 
         long value = 0;
         for (DataPoint dp : dataPoints) {

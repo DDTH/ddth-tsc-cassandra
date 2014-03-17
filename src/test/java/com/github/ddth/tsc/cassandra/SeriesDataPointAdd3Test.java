@@ -12,14 +12,14 @@ import com.github.ddth.tsc.mem.InmemCounter;
  * @author Thanh Nguyen <btnguyen2k@gmail.com>
  * @since 0.1.0
  */
-public class SeriesDataPointTest1 extends BaseCounterTest {
+public class SeriesDataPointAdd3Test extends BaseCounterTest {
     /**
      * Create the test case
      * 
      * @param testName
      *            name of the test case
      */
-    public SeriesDataPointTest1(String testName) {
+    public SeriesDataPointAdd3Test(String testName) {
         super(testName);
     }
 
@@ -27,13 +27,13 @@ public class SeriesDataPointTest1 extends BaseCounterTest {
      * @return the suite of tests being tested
      */
     public static Test suite() {
-        return new TestSuite(SeriesDataPointTest1.class);
+        return new TestSuite(SeriesDataPointAdd3Test.class);
     }
 
     @org.junit.Test
-    public void testSeriesDataPoints1() throws InterruptedException {
-        final long VALUE = 7;
-        final int NUM_LOOP = 1000;
+    public void testSeriesDataPoints3() throws InterruptedException {
+        final long VALUE = 13;
+        final int NUM_LOOP = 5000;
         final int NUM_THREAD = 4;
 
         Thread[] threads = new Thread[NUM_THREAD];
@@ -41,7 +41,7 @@ public class SeriesDataPointTest1 extends BaseCounterTest {
             threads[i] = new Thread() {
                 public void run() {
                     for (int i = 0; i < NUM_LOOP; i++) {
-                        counter.add(VALUE);
+                        counter1.add(VALUE);
                         try {
                             Thread.sleep(1);
                         } catch (InterruptedException e) {
@@ -59,7 +59,7 @@ public class SeriesDataPointTest1 extends BaseCounterTest {
             t.join();
         }
         long timestampEnd = System.currentTimeMillis() + 1;
-        DataPoint[] dataPoints = counter.getSeries(timestampStart, timestampEnd);
+        DataPoint[] dataPoints = counter1.getSeries(timestampStart, timestampEnd, 7);
         assertTrue(dataPoints.length >= 1);
 
         long value = 0;

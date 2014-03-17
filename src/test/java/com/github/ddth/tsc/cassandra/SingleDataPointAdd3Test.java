@@ -3,23 +3,23 @@ package com.github.ddth.tsc.cassandra;
 import junit.framework.Test;
 import junit.framework.TestSuite;
 
+import com.github.ddth.tsc.AbstractCounter;
 import com.github.ddth.tsc.DataPoint;
-import com.github.ddth.tsc.mem.InmemCounter;
 
 /**
- * Test cases for {@link InmemCounter}.
+ * Test cases for {@link CassandraCounter}.
  * 
  * @author Thanh Nguyen <btnguyen2k@gmail.com>
  * @since 0.1.0
  */
-public class LastN1Test extends BaseCounterTest {
+public class SingleDataPointAdd3Test extends BaseCounterTest {
     /**
      * Create the test case
      * 
      * @param testName
      *            name of the test case
      */
-    public LastN1Test(String testName) {
+    public SingleDataPointAdd3Test(String testName) {
         super(testName);
     }
 
@@ -27,24 +27,26 @@ public class LastN1Test extends BaseCounterTest {
      * @return the suite of tests being tested
      */
     public static Test suite() {
-        return new TestSuite(LastN1Test.class);
+        return new TestSuite(SingleDataPointAdd3Test.class);
     }
 
     @org.junit.Test
-    public void testLastN1() throws InterruptedException {
-        final long VALUE = 7;
+    public void testSingleDataPoint3() throws InterruptedException {
+        final long VALUE = 5;
         final int NUM_LOOP = 1000;
         final int NUM_THREAD = 4;
+        final long timestamp = System.currentTimeMillis();
 
         Thread[] threads = new Thread[NUM_THREAD];
         for (int i = 0; i < threads.length; i++) {
             threads[i] = new Thread() {
                 public void run() {
                     for (int i = 0; i < NUM_LOOP; i++) {
-                        counter.add(VALUE);
+                        counter1.add(timestamp, VALUE);
                         try {
                             Thread.sleep(0);
                         } catch (InterruptedException e) {
+                            e.printStackTrace();
                         }
                     }
                 }
@@ -57,13 +59,11 @@ public class LastN1Test extends BaseCounterTest {
         for (Thread t : threads) {
             t.join();
         }
-        DataPoint[] dataPoints = counter.getLastN(10);
-        assertEquals(10, dataPoints.length);
 
-        long value = 0;
-        for (DataPoint dp : dataPoints) {
-            value += dp.value();
-        }
-        assertEquals(VALUE * NUM_LOOP * NUM_THREAD, value);
+        long delta = timestamp % AbstractCounter.RESOLUTION_MS;
+        long key = timestamp - delta;
+        DataPoint dataPoint = counter1.get(timestamp);
+        assertEquals(VALUE * NUM_LOOP * NUM_THREAD, dataPoint.value());
+        assertEquals(key, dataPoint.timestamp());
     }
 }

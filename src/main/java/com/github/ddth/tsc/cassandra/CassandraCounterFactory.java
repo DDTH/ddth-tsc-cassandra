@@ -11,6 +11,8 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Session;
 import com.github.ddth.tsc.AbstractCounterFactory;
 import com.github.ddth.tsc.ICounter;
+import com.github.ddth.tsc.cassandra.internal.CounterMetadata;
+import com.github.ddth.tsc.cassandra.internal.MetadataManager;
 import com.github.ddth.tsc.mem.InmemCounter;
 
 /**
@@ -21,19 +23,18 @@ import com.github.ddth.tsc.mem.InmemCounter;
  */
 public class CassandraCounterFactory extends AbstractCounterFactory {
 
-    public final static String TABLE_COUNTERS = "tsc_counters";
-    public final static String TABLE_METADATA = "tsc_metadata";
-
     private final static String[] EMPTY_STRING_ARR = new String[0];
 
     private final Logger LOGGER = LoggerFactory.getLogger(CassandraCounterFactory.class);
 
     private List<String> hosts = new ArrayList<String>();
-    private String keyspace, tableTemplate = TABLE_COUNTERS;
+    private String keyspace;
     private int port = 9042;
     private boolean myOwnCluster = false;
     private Cluster cluster;
     private Session session;
+
+    private MetadataManager metadataManager;
 
     public CassandraCounterFactory addHost(String host) {
         hosts.add(host);
@@ -90,27 +91,6 @@ public class CassandraCounterFactory extends AbstractCounterFactory {
         return this;
     }
 
-    /**
-     * Name of the table to store counter data.
-     * 
-     * <p>
-     * Note: if it contains the string <code>${counter}</code>, then for each
-     * counter the string <code>${counter}</code> is replaced by the counter's
-     * name.
-     * </p>
-     * 
-     * @param tableTemplate
-     * @return
-     */
-    public CassandraCounterFactory setTableTemplate(String tableTemplate) {
-        this.tableTemplate = tableTemplate;
-        return this;
-    }
-
-    public String getTableTemplate() {
-        return tableTemplate;
-    }
-
     public CassandraCounterFactory setCluster(Cluster cluster) {
         if (session != null) {
             session.close();
@@ -140,6 +120,12 @@ public class CassandraCounterFactory extends AbstractCounterFactory {
             myOwnCluster = true;
         }
         session = cluster.connect(keyspace);
+
+        metadataManager = new MetadataManager();
+        metadataManager.setCluster(cluster).setKeyspace(keyspace)
+                .setTableMetadata(MetadataManager.DEFAULT_METADATA_TABLE);
+        metadataManager.init();
+
         super.init();
     }
 
@@ -152,6 +138,16 @@ public class CassandraCounterFactory extends AbstractCounterFactory {
             super.destroy();
         } catch (Exception e) {
             LOGGER.warn(e.getMessage(), e);
+        }
+
+        if (metadataManager != null) {
+            try {
+                metadataManager.destroy();
+            } catch (Exception e) {
+                LOGGER.warn(e.getMessage(), e);
+            } finally {
+                metadataManager = null;
+            }
         }
 
         if (session != null) {
@@ -176,26 +172,19 @@ public class CassandraCounterFactory extends AbstractCounterFactory {
     }
 
     /**
-     * If {@link #tableTemplate} contains the string <code>${counter}</code> it
-     * will be replaced by the {@code counterName}.
-     * 
-     * @param counterName
-     * @return
-     */
-    protected String calcTableName(String counterName) {
-        return tableTemplate.replaceAll("\\$\\{counter\\}", counterName);
-    }
-
-    /**
      * {@inheritDoc}
      */
     @Override
     protected ICounter createCounter(String name) {
-        String tablename = calcTableName(name);
+        CounterMetadata metadata = metadataManager.getCounterMetadata(name);
+        if (metadata == null) {
+            throw new IllegalStateException("No metadata found for counter [" + name + "]!");
+        }
+
         CassandraCounter counter = new CassandraCounter();
         counter.setName(name);
         counter.setSession(session);
-        counter.setTableName(tablename);
+        counter.setMetadata(metadata);
         counter.init();
         return counter;
     }

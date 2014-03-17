@@ -6,9 +6,11 @@ DDTH's Cassandra-backed Time Series Counter.
 Project home:
 [https://github.com/DDTH/ddth-tsc-cassandra](https://github.com/DDTH/ddth-tsc-cassandra)
 
-OSGi environment: ddth-tsc is packaged as an OSGi bundle.
+OSGi environment: ddth-tsc-cassandra is packaged as an OSGi bundle.
 
 See also [ddth-tsc](https://github.com/DDTH/ddth-tsc).
+
+See also [Cassandra table schema](SCHEMA.md).
 
 
 ## License ##
@@ -20,7 +22,7 @@ Third party libraries are distributed under their own licenses.
 
 ## Maven Release #
 
-Latest release version: `0.2.0`. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
+Latest release version: `0.3.0`. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
 Maven dependency:
 
@@ -28,19 +30,17 @@ Maven dependency:
 <dependency>
 	<groupId>com.github.ddth</groupId>
 	<artifactId>ddth-tsc</artifactId>
-	<version>0.2.0</version>
+	<version>0.3.0</version>
 </dependency>
 <dependency>
 	<groupId>com.github.ddth</groupId>
 	<artifactId>ddth-tsc-cassandra</artifactId>
-	<version>0.2.0</version>
+	<version>0.3.0</version>
 </dependency>
 ```
 
 
 ## Usage ##
-
-[Cassandra table schema](SCHEMA.md).
 
 Sample code:
 

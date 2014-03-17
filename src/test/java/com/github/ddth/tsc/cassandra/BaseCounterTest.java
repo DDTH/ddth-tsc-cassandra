@@ -18,7 +18,7 @@ import com.github.ddth.tsc.mem.InmemCounter;
  */
 public abstract class BaseCounterTest extends TestCase {
 
-    protected CassandraCounter counter;
+    protected CassandraCounter counter1, counter2;
     protected CassandraCounterFactory counterFactory;
     protected EmbeddedCassandraServer embeddedCassandraServer;
     protected Cluster cluster;
@@ -26,7 +26,6 @@ public abstract class BaseCounterTest extends TestCase {
     private final static String CASSANDRA_HOST = "127.0.0.1";
     private final static int CASSANDRA_PORT = 9042;
     private final static String KEYSPACE = "tsc";
-    private final static String TABLE = "tsc_counters";
 
     public BaseCounterTest(String testName) {
         super(testName);
@@ -43,18 +42,41 @@ public abstract class BaseCounterTest extends TestCase {
         session.execute("CREATE KEYSPACE "
                 + KEYSPACE
                 + " WITH replication={'class':'SimpleStrategy','replication_factor':'1'} AND durable_writes=true");
+
+        // create metadata table
+        session.execute("CREATE TABLE " + KEYSPACE + "." + CqlTemplate.TABLE_METADATA
+                + " (c varchar, o text, PRIMARY KEY (c)) WITH COMPACT STORAGE");
+
+        // counter 1: counter column
+        String table1 = CqlTemplate.TABLE_COUNTER + "_1";
+        session.execute("UPDATE " + KEYSPACE + "." + CqlTemplate.TABLE_METADATA
+                + " SET o='{\"table\":\"" + table1
+                + "\", \"counter_column\":true}' WHERE c='test_counter_1'");
         session.execute("CREATE TABLE "
                 + KEYSPACE
                 + "."
-                + TABLE
+                + table1
                 + " (c varchar, ym int, d int, t bigint, v counter, PRIMARY KEY ((c, ym, d), t) ) WITH COMPACT STORAGE");
+
+        // counter 2: bigint column
+        String table2 = CqlTemplate.TABLE_COUNTER + "_2";
+        session.execute("UPDATE " + KEYSPACE + "." + CqlTemplate.TABLE_METADATA
+                + " SET o='{\"table\":\"" + table2
+                + "\", \"counter_column\":false}' WHERE c='test_counter_2'");
+        session.execute("CREATE TABLE "
+                + KEYSPACE
+                + "."
+                + table2
+                + " (c varchar, ym int, d int, t bigint, v bigint, PRIMARY KEY ((c, ym, d), t) ) WITH COMPACT STORAGE");
+
         session.close();
 
         counterFactory = new CassandraCounterFactory();
-        counterFactory.setCluster(cluster).setKeyspace(KEYSPACE).setTableTemplate(TABLE);
+        counterFactory.setCluster(cluster).setKeyspace(KEYSPACE);
         counterFactory.init();
 
-        counter = (CassandraCounter) counterFactory.getCounter("test_metric");
+        counter1 = (CassandraCounter) counterFactory.getCounter("test_counter_1");
+        counter2 = (CassandraCounter) counterFactory.getCounter("test_counter_2");
     }
 
     @After
@@ -68,15 +90,6 @@ public abstract class BaseCounterTest extends TestCase {
                 counterFactory = null;
             }
         }
-
-        // if (counter != null) {
-        // try {
-        // counter.destroy();
-        // } catch (Exception e) {
-        // } finally {
-        // counter = null;
-        // }
-        // }
 
         if (cluster != null) {
             try {
