@@ -9,7 +9,7 @@
 
 	<groupId>com.github.ddth</groupId>
 	<artifactId>ddth-tsc-cassandra</artifactId>
-	<version>0.2.1</version>
+	<version>release-0.3.0</version>
 	<packaging>bundle</packaging>
 
 	<name>ddth-tsc-cassndra</name>
