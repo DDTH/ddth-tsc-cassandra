@@ -1,6 +1,12 @@
 ddth-tsc-cassandra release notes
 ================================
 
+0.3.1 - 2014-03-17
+------------------
+- POM fix
+- Table `tsc_metadata` update
+
+
 0.3.0 - 2014-03-17
 ------------------
 - Upgrade to [ddth-tsc v0.3.0](https://github.com/DDTH/ddth-tsc/blob/master/RELEASE-NOTES.md).

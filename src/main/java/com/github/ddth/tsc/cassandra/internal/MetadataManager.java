@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -15,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.github.ddth.commons.utils.DPathUtils;
 import com.github.ddth.commons.utils.SerializationUtils;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -203,18 +203,16 @@ public class MetadataManager {
     @SuppressWarnings("unchecked")
     private CounterMetadata findCounterMetadata(String counterName) {
         String jsonString = getRow(DEFAULT_METADATA_NAME);
-        Map<String, Object> parent = SerializationUtils.fromJsonString(jsonString, Map.class);
+        List<Object> parent = SerializationUtils.fromJsonString(jsonString, List.class);
         if (parent == null) {
             return null;
         }
-        for (Entry<String, Object> entry : parent.entrySet()) {
-            String pattern = entry.getKey();
-            if (Pattern.matches(pattern, counterName)) {
-                Object value = entry.getValue();
-                if (value instanceof Map) {
-                    return CounterMetadata.fromMap((Map<String, Object>) value);
-                } else {
-                    return null;
+        for (Object entry : parent) {
+            if (entry instanceof Map) {
+                Map<String, Object> map = (Map<String, Object>) entry;
+                String pattern = DPathUtils.getValue(map, "pattern", String.class);
+                if (Pattern.matches(pattern, counterName)) {
+                    return CounterMetadata.fromMap(map);
                 }
             }
         }

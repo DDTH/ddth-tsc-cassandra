@@ -28,7 +28,7 @@ CREATE TABLE tsc_metadata (
     PRIMARY KEY (c)
 ) WITH COMPACT STORAGE;
 
-UPDATE tsc_metadata SET o='{"^.*$":{"table":"tsc_counters","counter_column":true}}' WHERE c='*';
+UPDATE tsc_metadata SET o='[{"pattern":"^.*$","table":"tsc_counters","counter_column":true}]' WHERE c='*';
 
 UPDATE tsc_metadata SET o='{"table":"tsc_counters_1", "counter_column":true}' WHERE c='counter_metric_1';
 
