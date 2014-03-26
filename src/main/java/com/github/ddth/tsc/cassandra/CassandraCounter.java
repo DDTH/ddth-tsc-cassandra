@@ -33,7 +33,8 @@ public class CassandraCounter extends AbstractCounter {
     private PreparedStatement pStmAdd, pStmSet, pStmGet, pStmGetRow;
     private CounterMetadata metadata;
 
-    private LoadingCache<Integer, Map<Long, DataPoint>> cacheShort, cacheLong;
+    private LoadingCache<Integer, Map<Long, DataPoint>> cacheRow;
+    private LoadingCache<Long, DataPoint> cachePoint;
 
     public CassandraCounter() {
     }
@@ -73,7 +74,7 @@ public class CassandraCounter extends AbstractCounter {
     }
 
     private void _initCaches() {
-        CacheLoader<Integer, Map<Long, DataPoint>> loader = new CacheLoader<Integer, Map<Long, DataPoint>>() {
+        CacheLoader<Integer, Map<Long, DataPoint>> loaderRow = new CacheLoader<Integer, Map<Long, DataPoint>>() {
             @Override
             public Map<Long, DataPoint> load(Integer yyyymmdd) throws Exception {
                 int yyyymm = yyyymmdd / 100;
@@ -81,17 +82,25 @@ public class CassandraCounter extends AbstractCounter {
                 return _getRow(getName(), yyyymm, dd);
             }
         };
-        cacheShort = CacheBuilder.newBuilder().expireAfterWrite(5, TimeUnit.MINUTES).build(loader);
-        cacheLong = CacheBuilder.newBuilder().expireAfterAccess(24, TimeUnit.HOURS).build(loader);
+        cacheRow = CacheBuilder.newBuilder().expireAfterAccess(24, TimeUnit.HOURS).build(loaderRow);
+
+        CacheLoader<Long, DataPoint> loaderPoint = new CacheLoader<Long, DataPoint>() {
+            @Override
+            public DataPoint load(Long key) throws Exception {
+                return _getPoint(getName(), key);
+            }
+        };
+        cachePoint = CacheBuilder.newBuilder().expireAfterWrite(5, TimeUnit.MINUTES)
+                .build(loaderPoint);
     }
 
     private void _destroyCaches() {
-        if (cacheLong != null) {
-            cacheLong.invalidateAll();
+        if (cacheRow != null) {
+            cacheRow.invalidateAll();
         }
 
-        if (cacheShort != null) {
-            cacheShort.invalidateAll();
+        if (cachePoint != null) {
+            cachePoint.invalidateAll();
         }
     }
 
@@ -163,7 +172,7 @@ public class CassandraCounter extends AbstractCounter {
     }
 
     /**
-     * Gets all data points of a day.
+     * Gets all data points of a day (used by cache loader).
      * 
      * @param counterName
      * @param yyyymm
@@ -186,24 +195,44 @@ public class CassandraCounter extends AbstractCounter {
         return result;
     }
 
+    private DataPoint _getPoint(String counterName, Long key) {
+        int[] yyyymm_dd = toYYYYMM_DD(key.longValue());
+        Row row = CassandraUtils.executeOne(session, pStmGet, counterName, yyyymm_dd[0],
+                yyyymm_dd[1], key.longValue());
+        if (row == null) {
+            return new DataPoint(Type.NONE, key.longValue(), 0, RESOLUTION_MS);
+        } else {
+            return new DataPoint(Type.SUM, key.longValue(), row.getLong("v"), RESOLUTION_MS);
+        }
+    }
+
     /**
-     * Gets all data points of a day specified by a time stamp.
+     * Gets all data points of a day specified by the timestamp, cache
+     * supported.
      * 
      * @param timestampMs
      * @return
      */
-    protected Map<Long, DataPoint> getRow(long timestampMs) {
-        Calendar now = Calendar.getInstance();
-        Calendar supply = Calendar.getInstance();
-        supply.setTimeInMillis(timestampMs);
+    protected Map<Long, DataPoint> getRowWithCache(long timestampMs) {
         int[] yyyymm_dd = toYYYYMM_DD(timestampMs);
         int yyyymmdd = yyyymm_dd[0] * 100 + yyyymm_dd[1];
         try {
-            if (supply.before(now) && supply.get(Calendar.DATE) != now.get(Calendar.DATE)) {
-                return cacheLong.get(yyyymmdd);
-            } else {
-                return cacheShort.get(yyyymmdd);
-            }
+            return cacheRow.get(yyyymmdd);
+        } catch (ExecutionException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Gets a single data point specified by the timestamp, cache supported
+     * 
+     * @param timestampMs
+     * @return
+     */
+    protected DataPoint getPointWithCache(long timestampMs) {
+        Long key = toTimeSeriesPoint(timestampMs);
+        try {
+            return cachePoint.get(key);
         } catch (ExecutionException e) {
             return null;
         }
@@ -214,23 +243,23 @@ public class CassandraCounter extends AbstractCounter {
      */
     @Override
     public DataPoint get(long timestampMs) {
-        Long key = toTimeSeriesPoint(timestampMs);
-        Map<Long, DataPoint> row = getRow(timestampMs);
-        DataPoint result = row != null ? row.get(key) : null;
-        return result != null ? result
-                : new DataPoint(Type.NONE, key.longValue(), 0, RESOLUTION_MS);
-
-        // int[] yyyymm_dd = toYYYYMM_DD(timestampMs);
-        //
-        // Row row = CassandraUtils.executeOne(session, pStmGet, getName(),
-        // yyyymm_dd[0],
-        // yyyymm_dd[1], key.longValue());
-        // if (row == null) {
-        // return new DataPoint(Type.NONE, key.longValue(), 0, RESOLUTION_MS);
-        // } else {
-        // return new DataPoint(Type.SUM, key.longValue(), row.getLong("v"),
-        // RESOLUTION_MS);
-        // }
+        DataPoint result = null;
+        Calendar now = Calendar.getInstance();
+        Calendar supply = Calendar.getInstance();
+        supply.setTimeInMillis(timestampMs);
+        if (supply.before(now)
+                && (supply.get(Calendar.DATE) != now.get(Calendar.DATE)
+                        || supply.get(Calendar.MONTH) != now.get(Calendar.MONTH) || supply
+                        .get(Calendar.YEAR) != now.get(Calendar.YEAR))) {
+            // another day
+            Map<Long, DataPoint> row = getRowWithCache(timestampMs);
+            result = row != null ? row.get(toTimeSeriesPoint(timestampMs)) : null;
+        } else {
+            // same day
+            result = getPointWithCache(timestampMs);
+        }
+        return result != null ? result : new DataPoint(Type.NONE, toTimeSeriesPoint(timestampMs)
+                .longValue(), 0, RESOLUTION_MS);
     }
 
     /**
