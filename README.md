@@ -22,7 +22,7 @@ Third party libraries are distributed under their own licenses.
 
 ## Maven Release #
 
-Latest release version: `0.3.1.2`. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
+Latest release version: `0.3.1.3`. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
 Maven dependency:
 
