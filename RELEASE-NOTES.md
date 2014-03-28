@@ -1,6 +1,11 @@
 ddth-tsc-cassandra release notes
 ================================
 
+0.3.2 - 2014-03-28
+------------------
+- Bugs fix & Improvements
+
+
 0.3.1.3 - 2014-03-26
 --------------------
 - Cache fix

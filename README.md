@@ -22,7 +22,7 @@ Third party libraries are distributed under their own licenses.
 
 ## Maven Release #
 
-Latest release version: `0.3.1.3`. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
+Latest release version: `0.3.2`. See [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
 Maven dependency:
 
@@ -30,12 +30,12 @@ Maven dependency:
 <dependency>
 	<groupId>com.github.ddth</groupId>
 	<artifactId>ddth-tsc</artifactId>
-	<version>0.3.1.2</version>
+	<version>0.3.2</version>
 </dependency>
 <dependency>
 	<groupId>com.github.ddth</groupId>
 	<artifactId>ddth-tsc-cassandra</artifactId>
-	<version>0.3.1.2</version>
+	<version>0.3.2</version>
 </dependency>
 ```
 

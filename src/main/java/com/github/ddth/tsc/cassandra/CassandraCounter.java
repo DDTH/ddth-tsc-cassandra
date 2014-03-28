@@ -33,8 +33,6 @@ public class CassandraCounter extends AbstractCounter {
     private PreparedStatement pStmAdd, pStmSet, pStmGet, pStmGetRow;
     private CounterMetadata metadata;
 
-    private LoadingCache<Integer, Map<Long, DataPoint>> cacheLongtime;
-
     public CassandraCounter() {
     }
 
@@ -72,28 +70,6 @@ public class CassandraCounter extends AbstractCounter {
         pStmGetRow = session.prepare(cqlGetRow);
     }
 
-    private void _initCaches() {
-        CacheLoader<Integer, Map<Long, DataPoint>> loaderRow = new CacheLoader<Integer, Map<Long, DataPoint>>() {
-            @Override
-            public Map<Long, DataPoint> load(Integer yyyymmdd) throws Exception {
-                int yyyymm = yyyymmdd / 100;
-                int dd = yyyymmdd % 100;
-                return _getRow(getName(), yyyymm, dd);
-            }
-        };
-        cacheLongtime = CacheBuilder.newBuilder().expireAfterAccess(24, TimeUnit.HOURS)
-                .build(loaderRow);
-    }
-
-    private void _destroyCaches() {
-        if (cacheLongtime != null) {
-            cacheLongtime.invalidateAll();
-        }
-
-        cacheShorttime.get().invalidateAll();
-        cacheShorttime.remove();
-    }
-
     /**
      * {@inheritDoc}
      */
@@ -102,7 +78,6 @@ public class CassandraCounter extends AbstractCounter {
         super.init();
 
         _initPreparedStatements();
-        _initCaches();
     }
 
     /**
@@ -110,11 +85,6 @@ public class CassandraCounter extends AbstractCounter {
      */
     @Override
     public void destroy() {
-        try {
-            _destroyCaches();
-        } catch (Exception e) {
-        }
-
         super.destroy();
     }
 
@@ -185,20 +155,7 @@ public class CassandraCounter extends AbstractCounter {
         return result;
     }
 
-    // private DataPoint _getPoint(String counterName, Long key) {
-    // int[] yyyymm_dd = toYYYYMM_DD(key.longValue());
-    // Row row = CassandraUtils.executeOne(session, pStmGet, counterName,
-    // yyyymm_dd[0],
-    // yyyymm_dd[1], key.longValue());
-    // if (row == null) {
-    // return new DataPoint(Type.NONE, key.longValue(), 0, RESOLUTION_MS);
-    // } else {
-    // return new DataPoint(Type.SUM, key.longValue(), row.getLong("v"),
-    // RESOLUTION_MS);
-    // }
-    // }
-
-    private ThreadLocal<LoadingCache<Integer, Map<Long, DataPoint>>> cacheShorttime = new ThreadLocal<LoadingCache<Integer, Map<Long, DataPoint>>>() {
+    private ThreadLocal<LoadingCache<Integer, Map<Long, DataPoint>>> cacheRow = new ThreadLocal<LoadingCache<Integer, Map<Long, DataPoint>>>() {
         @Override
         protected LoadingCache<Integer, Map<Long, DataPoint>> initialValue() {
             CacheLoader<Integer, Map<Long, DataPoint>> loaderRow = new CacheLoader<Integer, Map<Long, DataPoint>>() {
@@ -221,21 +178,11 @@ public class CassandraCounter extends AbstractCounter {
      * @param timestampMs
      * @return
      */
-    protected Map<Long, DataPoint> getRowWithCache(long timestampMs) {
+    private Map<Long, DataPoint> _getRowWithCache(long timestampMs) {
         int[] yyyymm_dd = toYYYYMM_DD(timestampMs);
         int yyyymmdd = yyyymm_dd[0] * 100 + yyyymm_dd[1];
-        Calendar target = Calendar.getInstance();
-        target.setTimeInMillis(timestampMs);
-        Calendar now = Calendar.getInstance();
         try {
-            if (target.before(now)
-                    && (target.get(Calendar.DATE) != now.get(Calendar.DATE)
-                            || target.get(Calendar.MONTH) != now.get(Calendar.MONTH) || target
-                            .get(Calendar.YEAR) != now.get(Calendar.YEAR))) {
-                return cacheLongtime.get(yyyymmdd);
-            } else {
-                return cacheShorttime.get().get(yyyymmdd);
-            }
+            return cacheRow.get().get(yyyymmdd);
         } catch (ExecutionException e) {
             return null;
         }
@@ -245,9 +192,39 @@ public class CassandraCounter extends AbstractCounter {
      * {@inheritDoc}
      */
     @Override
+    protected DataPoint[] getAllInRange(long timestampStartMs, long timestampEndMs) {
+        try {
+            // initialize cache
+            Calendar cal = Calendar.getInstance();
+            cal.setTimeInMillis(timestampStartMs);
+            cal.set(Calendar.HOUR_OF_DAY, 0);
+            cal.set(Calendar.MINUTE, 0);
+            cal.set(Calendar.SECOND, 0);
+            cal.set(Calendar.MILLISECOND, 0);
+            while (cal.getTimeInMillis() <= timestampEndMs) {
+                int yyyy = cal.get(Calendar.YEAR);
+                int mm = cal.get(Calendar.MONTH) + 1;
+                int dd = cal.get(Calendar.DATE);
+                int yyyymmdd = yyyy * 10000 + mm * 100 + dd;
+                try {
+                    cacheRow.get().get(yyyymmdd);
+                } catch (ExecutionException e) {
+                }
+                cal.add(Calendar.DATE, 1);
+            }
+            return super.getAllInRange(timestampStartMs, timestampEndMs);
+        } finally {
+            cacheRow.remove();
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public DataPoint get(long timestampMs) {
         Long _key = toTimeSeriesPoint(timestampMs);
-        Map<Long, DataPoint> row = getRowWithCache(timestampMs);
+        Map<Long, DataPoint> row = _getRowWithCache(timestampMs);
         DataPoint result = row != null ? row.get(_key) : null;
         return result != null ? result : new DataPoint(Type.NONE, _key.longValue(), 0,
                 RESOLUTION_MS);
